@@ -38,7 +38,12 @@ To use:
 </ol>
 <hr>
 <h3>DevFund.sol</h3>
-When somebody calls claim(), tokens are automatically distributed to all Developer's addresses.
+Developers are assigned salaries (isDeveloper[address].montlyAllowance)<br>
+Developer can claim every 30 days through claim()
+Initial Supply: 1M tokens
+Total Supply: Initial + 0.5% TX fee
 <hr>
 <h3>MarketingFund.sol</h3>
-One address can claim all tokens from the Smart Contract
+One address can claim monthly allowance from the Smart Contract<br>
+Total: 1.5M Tokens
+Vesting: 10% per month for 10 months

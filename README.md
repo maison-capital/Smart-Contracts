@@ -45,5 +45,5 @@ Developer can claim every 30 days through claim()<br>
 <hr>
 <h3>MarketingFund.sol</h3>
 One address can claim monthly allowance from the Smart Contract<br>
-**Total**: 1.5M Tokens<br>
-**Vesting**: 10% per month for 10 months
+**Total:** 1.5M Tokens<br>
+**Vesting:** 10% per month for 10 months

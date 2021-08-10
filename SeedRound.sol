@@ -425,9 +425,10 @@ contract SeedDistribution {
 
     // _returnToken Declares claim token
     // MSN-Testnet 0x2F8De05106132a363Ca261083D496cf1b5680cc1
-    IERC20 private immutable _returnToken = IERC20(0x2F8De05106132a363Ca261083D496cf1b5680cc1);
+    IERC20 private _returnToken;
 
     event OwnershipTransferred(address _previousOwner, address _newOwner);
+    event OwnershipRenounced(address _previousOwner, address _newOwner);
     event AddressesAdded(uint256 _amount);
 
     address public owner;
@@ -462,9 +463,15 @@ contract SeedDistribution {
         owner = msg.sender;
     }
 
+    function setTokenAddress(IERC20 _token) public onlyOwner {
+        _returnToken = _token;
+    }
+
     function addAddresses(address[] memory _addresses, uint256[] memory _ammounts) public onlyOwner {
-        uint256 count = _addresses.length;
-        for (uint256 i = 0; i < count; i++) {
+        uint256 countAddr = _addresses.length;
+        uint256 countAmm = _ammounts.length;
+        require(countAddr == countAmm, "Lengths are not matching");
+        for (uint256 i = 0; i < countAddr; i++) {
             inPresale[_addresses[i]].isWhiteListed = true;
             uint256 _tokenAmount = _ammounts[i];
             inPresale[_addresses[i]].tokenAmount = (_tokenAmount*10**2)/seedPrice;
@@ -472,13 +479,19 @@ contract SeedDistribution {
             inPresale[_addresses[i]].tgeCollect = (((_tokenAmount*10**2)/seedPrice)*tgeToCollect)/(1*10**5);
             inPresale[_addresses[i]].nrmCollect = (((_tokenAmount*10**2)/seedPrice)*normalCollect)/(1*10**5);
         }
-        emit AddressesAdded(count);
+        emit AddressesAdded(countAddr);
     }
 
     function transferOwnership(address _newOwner) public onlyOwner {
         address previousOwner = owner;
         owner = _newOwner;
         emit OwnershipTransferred(previousOwner, owner);
+    }
+
+    function renounceOwnership() public onlyOwner {
+        address _previousOwner = owner;
+        owner = address(0);
+        emit OwnershipRenounced(_previousOwner, owner);
     }
     
     /// @return deposit token address

@@ -386,7 +386,12 @@ contract MarketingFund {
 
     address private owner;
 
-    IERC20 public msnToken = IERC20(0x2F8De05106132a363Ca261083D496cf1b5680cc1);
+    IERC20 public msnToken;
+
+    uint256 private totalTokens = (15*10**5)*(10**18);
+    uint256 private monthlyWithdrawal = totalTokens/10;
+    uint256 private tgeTime;
+    uint256 private txCount;
 
     event FundsWithdrawn(address byWho, uint256 amount);
     event MemberAdded(address _newMember);
@@ -404,8 +409,10 @@ contract MarketingFund {
         _;
     }
 
-    constructor() {
+    constructor(IERC20 _token) {
         owner = msg.sender;
+        msnToken = _token;
+        tgeTime = block.timestamp;
     }
 
     function addMember(address _newMember) public onlyOwner {
@@ -435,12 +442,22 @@ contract MarketingFund {
         return msnToken;
     }
 
-    function claimTokens() public fundMember {
-        uint256 _amount = _maisonToken().balanceOf(address(this));
-        _maisonToken().safeTransfer(msg.sender, _amount);
+    function _returnMonthsSinceTGE() internal view returns (uint256) {
+        uint256 unixTimeSince = block.timestamp - tgeTime;
+        uint256 monthSince = unixTimeSince/60/60/24/30;
+        return monthSince;
+    }
+
+    function claim() public fundMember{
+        uint256 monthSinceTGE = _returnMonthsSinceTGE();
+        uint256 canClaim = 1 + monthSinceTGE - txCount;
+        require(canClaim > 0, "Next claim time was not reached");
+        txCount ++;
+        _maisonToken().safeTransfer(msg.sender, monthlyWithdrawal);
     }
 
     function withdrawAnyToken(IERC20 _address) public onlyOwner {
+        require(_address != msnToken, "Error: Withdrawing MSN Token");
         require(_address.balanceOf(address(this)) > 0, "No tokens to transfer");
         _address.safeTransfer(msg.sender, _address.balanceOf(address(this)));
     }

@@ -378,100 +378,123 @@ library SafeERC20 {
     }
 }
 
-contract DevFund {
+contract DevSalary {
 
     using SafeERC20 for IERC20;
 
-    address[] private developers;
+    struct developers {
+        bool isDeveloper;
+        uint256 monthlyAllowance;
+        uint256 txCount;
+        uint256 totalClaimed;
+        uint256 joinedAtMonth;
+    }
 
-    mapping(address => bool) public isDeveloper;
+    mapping(address => developers) public msnDevelopers;
+
+    mapping(address => bool) isManager;
 
     address private owner;
-    address private manager;
-    uint256 private lastCollect;
+    uint256 private tgeTime;
 
-    IERC20 public msnToken = IERC20(0x2F8De05106132a363Ca261083D496cf1b5680cc1);
+    IERC20 public msnToken;
 
-    event DevelopersAdded(uint256 amount, address[] addresses);
-    event AddressAlreadyAdded(address);
+
+    event DeveloperAdded(address newDevAddress, uint256 monthlyAllowance);
+    event DeveloperDeleted(address deletedDev);
+    event DeveloperUpdated(address developer, uint256 newMonthlyAllowance);
+    event DevelopersAdded(address[] developers);
+    event OwnershipTransferred(address _previousOwner, address _newOwner);
+    event OwnershipRenounced(address _previousOwner, address _newOwner);
 
     modifier onlyOwner {
-        require(owner == msg.sender, "You're not authorised to do this action");
+        require(msg.sender == owner,"onlyOwner: You're not allowed");
         _;
     }
 
     modifier onlyManager {
-        require(msg.sender == manager, "You're not authorised to do this action");
+        require(isManager[msg.sender],"OnlyManager: You're not allowed");
         _;
     }
 
-    constructor() {
+    constructor(IERC20 _token) {
         owner = msg.sender;
+        isManager[msg.sender] = true;
+        tgeTime = block.timestamp;
+        msnToken = _token;
     }
 
-    function _maisonToken() internal view returns(IERC20) {
+    function _msnToken() internal view returns (IERC20) {
         return msnToken;
     }
-    
-    function devCount() public view returns(uint256) {
-        return developers.length;
+
+    function addManager(address _newManager) public onlyManager {
+        isManager[_newManager] = true;
     }
 
-    function addDevelopers(address[] memory _addresses) public onlyOwner {
-        uint256 countAddresses = _addresses.length;
-        uint256 countDevs = developers.length;
-        for (uint256 i = 0; i < countAddresses; i++) {
-            if (countDevs == 0) {
-                developers.push(_addresses[i]);
-                isDeveloper[_addresses[i]] = true;
-            } else {
-                for (uint256 x = 0; x < countDevs; x++) {
-                    if(_addresses[i] == developers[x]) {
-                        emit AddressAlreadyAdded(_addresses[i]);
-                        revert("Address was already added");
-                    } else {
-                        developers.push(_addresses[i]);
-                        isDeveloper[_addresses[i]] = true;
-                    }
-                }
-            }
+    function deleteManager(address _deleteManager) public onlyManager {
+        isManager[_deleteManager] = false;
+    }
+
+    function addDevelopers(address[] memory _newDev, uint256[] memory _monthlyAllowance) public onlyManager {
+        uint256 countDev = _newDev.length;
+        uint256 countAll = _monthlyAllowance.length;
+        require(countDev == countAll, "Lengths are not matching");
+        for (uint256 i = 0; i < countDev; i++) {
+            msnDevelopers[_newDev[i]].isDeveloper = true;
+            msnDevelopers[_newDev[i]].monthlyAllowance = _monthlyAllowance[i]*10**18;
+            msnDevelopers[_newDev[i]].joinedAtMonth = _returnMonthsSinceTGE();
         }
-        emit DevelopersAdded(countAddresses, _addresses);
+        emit DevelopersAdded(_newDev);
     }
 
-    function changeDeveloper(address _walletToDelete, address _walletToAdd) public onlyOwner {
-        uint256 count = developers.length;
-        for (uint256 i = 0; i < count; i++) {
-            if (_walletToDelete == developers[i]) {                
-                isDeveloper[_walletToDelete] = false;
-                isDeveloper[_walletToAdd] = true;                
-                developers[i] = _walletToAdd;
-                break;
-            }
-        }
+    function deleteDeveloper(address _address) public onlyManager {
+        require(msnDevelopers[_address].isDeveloper, "Error: Developer doesn't exist");
+        msnDevelopers[_address].isDeveloper = false;
+        msnDevelopers[_address].monthlyAllowance = 0;
+        emit DeveloperDeleted(_address);
     }
 
-    function changeTokenAddress (IERC20 _newAddress) public onlyOwner {
-        msnToken = _newAddress;
+    function updateDeveloper(address _address, uint256 _newMonthlyAllowance) public onlyManager {
+        require(msnDevelopers[_address].isDeveloper, "Error: Developer doesn't exist");
+        msnDevelopers[_address].monthlyAllowance = _newMonthlyAllowance*10**18;
+        emit DeveloperUpdated(_address, _newMonthlyAllowance);
     }
 
-    function claimTokens() public {
-        require(isDeveloper[msg.sender],"You're not able to claim");
-        uint256 totalAmount = _maisonToken().balanceOf(address(this));
-        uint256 countDevelopers = developers.length;
-        uint256 eachDev = totalAmount/countDevelopers;
-        lastCollect = block.timestamp;
-        for (uint256 i = 0; i < countDevelopers; i++) {
-            _maisonToken().safeTransfer(developers[i], eachDev);
-        }
+    function _returnMonthsSinceTGE() internal view returns (uint256) {
+        uint256 unixTimeSince = block.timestamp - tgeTime;
+        uint256 monthSince = unixTimeSince/60/60/24/30;
+        return monthSince;
     }
 
-    function timeSinceLastCollect() public view returns(uint256) {
-        return lastCollect;
+    function claim() public {
+        require(msnDevelopers[msg.sender].isDeveloper, "OnlyDeveloper: You're not allowed");
+        uint256 monthSinceTGE = _returnMonthsSinceTGE();
+        uint256 canClaim = 1 + monthSinceTGE - msnDevelopers[msg.sender].txCount - msnDevelopers[msg.sender].joinedAtMonth;
+        require(canClaim > 0, "Claim time was not reached yet");
+        msnDevelopers[msg.sender].txCount += canClaim;
+        uint256 toClaim = msnDevelopers[msg.sender].monthlyAllowance*canClaim;
+        msnDevelopers[msg.sender].totalClaimed += toClaim;
+        _msnToken().safeTransfer(msg.sender, toClaim);
     }
-    
+
+    function transferOwnership(address _newOwner) public onlyOwner {
+        require(_newOwner != address(0), "New owner is the zero address");
+        address _previousOwner = owner;
+        owner = _newOwner;
+        emit OwnershipTransferred(_previousOwner, _newOwner);
+    }
+
+    function renounceOwnership() public onlyOwner {
+        address _previousOwner = owner;
+        owner = address(0);
+        emit OwnershipRenounced(_previousOwner, owner);
+    }
+
     function withdrawAnyToken(IERC20 _address) public onlyOwner {
+        require(_address != msnToken, "Error: Withdrawing MSN Token");
         require(_address.balanceOf(address(this)) > 0, "No tokens to transfer");
         _address.safeTransfer(msg.sender, _address.balanceOf(address(this)));
     }
+
 }

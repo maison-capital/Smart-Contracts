@@ -39,11 +39,11 @@ To use:
 <hr>
 <h3>DevFund.sol</h3>
 Developers are assigned salaries (isDeveloper[address].montlyAllowance)<br>
-Developer can claim every 30 days through claim()
-Initial Supply: 1M tokens
+Developer can claim every 30 days through claim()<br>
+Initial Supply: 1M tokens<br>
 Total Supply: Initial + 0.5% TX fee
 <hr>
 <h3>MarketingFund.sol</h3>
 One address can claim monthly allowance from the Smart Contract<br>
-Total: 1.5M Tokens
+Total: 1.5M Tokens<br>
 Vesting: 10% per month for 10 months

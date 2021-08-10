@@ -446,11 +446,13 @@ contract PrivatePresale {
 
     // _returnToken Declares claim token
     // MSN-Testnet 0xDa44884bd71E1A22a30Ef5577d6271B90Cf2006D
-    IERC20 private immutable _returnToken = IERC20(0x2F8De05106132a363Ca261083D496cf1b5680cc1);
+    IERC20 private _returnToken;
 
     event DepositSuccessful(address _sender, uint256 _value, uint256 _totalValue);
     event PrivateRoundStatus(string _privateOpened);
     event OwnershipTransferred(address _previousOwner, address _newOwner);
+    event OwnershipRenounced(address _previousOwner, address _newOwner);
+
 
     address public owner;
 
@@ -493,6 +495,12 @@ contract PrivatePresale {
         owner = _newOwner;
         emit OwnershipTransferred(previousOwner, owner);
     }
+
+    function renounceOwnership() public onlyOwner {
+        address _previousOwner = owner;
+        owner = address(0);
+        emit OwnershipRenounced(_previousOwner, owner);
+    }
     
     /// @return deposit token address
     function depositToken() public view virtual returns (IERC20) {
@@ -504,15 +512,14 @@ contract PrivatePresale {
         return _returnToken;
     }
 
+    function setTokenAddress(IERC20 _token) public onlyOwner {
+        _returnToken = _token;
+    }
+
     /// @return collect times (9 values)
     function collectTimes() public view virtual returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
         require(tgeHappened == true, "TGE has not happened!");
         return(tgeTime, Collect1, Collect2, Collect3, Collect4, Collect5, Collect6, Collect7, Collect8);
-    }
-
-    /// @return balance of sc in deposit token
-    function depositTokenBalance() public view returns(uint256) {
-        return depositToken().balanceOf(address(this));
     }
 
     /// @return correctly collected balance (without tokens sent not through privatePresale function)
@@ -578,8 +585,10 @@ contract PrivatePresale {
     }
 
     function addAddresses(address[] memory _addresses, uint256[] memory _ammounts) public onlyOwner {
-        uint256 count = _addresses.length;
-        for (uint256 i = 0; i < count; i++) {
+        uint256 countAddr = _addresses.length;
+        uint256 countAmm = _ammounts.length;
+        require(countAddr == countAmm, "Lengths are not matching");
+        for (uint256 i = 0; i < countAddr; i++) {
             inPresale[_addresses[i]].isWhiteListed = true;
             uint256 _tokenAmount = _ammounts[i];
             inPresale[_addresses[i]].tokenAmount = (_tokenAmount*10**2)/privatePrice;
@@ -592,18 +601,17 @@ contract PrivatePresale {
 
     /// @notice Changes Private Round status (true = open, false = closed)
     /// @notice Implement SoftCap
-    function openPrivateRound() public onlyOwner {
+    function changePrivateRoundStatus() public onlyOwner {
         if(!privateOpen) {
             privateOpen = true;
-            emit PrivateRoundStatus("Private Round is now open!");
         } else {
-            revert();
+            closePresale();
         }
     }
 
     /** @notice Closes presale. Transfers deposit token to owner, closes private round
     To initiate claim, setTGEHappened() must be called */
-    function closePresale() public onlyOwner {
+    function closePresale() internal {
         require(totalCollected >= softCap,"ClosePresale Error: Soft Cap has not been reached");
         totalCollected = 0;
         privateOpen = false;

@@ -390,7 +390,7 @@ contract PrivatePresale {
     using SafeERC20 for IERC20;
 
     /// @notice privatePrice in cents (20 = $0.2)
-    uint256 public privatePrice = 20;
+    uint256 public privatePrice = 60;
     // totalCollected is the total amount of deposit token collected
     uint256 private totalCollected;
     // previousCollected used to calculate amount of tokens received
@@ -442,10 +442,9 @@ contract PrivatePresale {
     // _depositToken Declares deposit token
     // 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56 - Mainnet BUSD Address
     // 0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee - Testnet BUSD Address
-    IERC20 private immutable _depositToken = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
+    IERC20 private immutable _depositToken = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
 
     // _returnToken Declares claim token
-    // MSN-Testnet 0xDa44884bd71E1A22a30Ef5577d6271B90Cf2006D
     IERC20 private _returnToken;
 
     event DepositSuccessful(address _sender, uint256 _value, uint256 _totalValue);
@@ -455,6 +454,7 @@ contract PrivatePresale {
 
 
     address public owner;
+    address public collectAddress;
 
     ///@dev Mapping of address -> struct
     mapping(address => presaleWallet) public inPresale;
@@ -483,9 +483,10 @@ contract PrivatePresale {
         _;
     }
 
-    constructor (uint256 _softCap, uint256 _hardCap) {
+    constructor (uint256 _softCap, uint256 _hardCap, address _collectAddress) {
         owner = msg.sender;
         // walletLimit = _walletLimit;
+        collectAddress = _collectAddress;
         softCap = _softCap;
         hardCap = _hardCap;
     }
@@ -580,7 +581,7 @@ contract PrivatePresale {
         inPresale[msg.sender].nrmCollect += (((_depositAmount*10**2)/privatePrice)*normalCollect)/(1*10**5);
         inPresale[msg.sender].txCount ++;
         amountOfTokensNeeded += (_depositAmount*10**2)/privatePrice;
-        depositToken().safeTransfer(owner, _depositAmount);
+        depositToken().safeTransfer(collectAddress, _depositAmount);
         emit DepositSuccessful(msg.sender, _depositAmount, inPresale[msg.sender].amount);
     }
 
@@ -605,17 +606,8 @@ contract PrivatePresale {
         if(!privateOpen) {
             privateOpen = true;
         } else {
-            closePresale();
+            privateOpen = false;
         }
-    }
-
-    /** @notice Closes presale. Transfers deposit token to owner, closes private round
-    To initiate claim, setTGEHappened() must be called */
-    function closePresale() internal {
-        require(totalCollected >= softCap,"ClosePresale Error: Soft Cap has not been reached");
-        totalCollected = 0;
-        privateOpen = false;
-        depositToken().safeTransfer(owner, totalCollected);
     }
     
     /// @notice Sets tgeHappened to true and claimTokens() could be used

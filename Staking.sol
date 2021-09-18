@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.7;
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -378,246 +378,298 @@ library SafeERC20 {
     }
 }
 
-
 /**
- * @title PrivatePresale
- * @dev Private Presale smart contract, which calculates the amount of tokens to be claimed
- * based on the price of one token in relation to the deposit token
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
  */
-
-contract SeedDistribution {
-
-    using SafeERC20 for IERC20;
-
-    // tgeHappened is required for token distribution to start
-    /// @dev set to true when token generation event has happened, users can collect tokens only when true
-    bool public tgeHappened;
-
-    // tgeToCollect returns % of tokens to collect after TGE (11% = 11000)
-    uint256 private tgeToCollect = 11000;
-
-    // normalCollect returns % of tokens to collect after 1st collect (8.9% = 8900)
-    uint256 private normalCollect = 8900;
-
-    uint256 private seedPrice = 50;
-
-    /// @dev used to return the amount of tokens to send to this SC for claim
-    uint256 public amountOfTokensNeeded;
-
-    /// @dev when tgeHappened sets to true, block.timestamp is stored
-    uint256 private tgeTime;
-    // Collect1 -> Collect10 – 2 weeks after each other (8.9% collect)
-    uint256 private Collect1;
-    uint256 private Collect2;
-    uint256 private Collect3;
-    uint256 private Collect4;
-    uint256 private Collect5;
-    uint256 private Collect6;
-    uint256 private Collect7;
-    uint256 private Collect8;
-    uint256 private Collect9;
-    uint256 private Collect10;
-
-    // _depositToken Declares deposit token
-    // 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56 - Mainnet BUSD Address
-    // 0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee - Testnet BUSD Address
-    IERC20 private immutable _depositToken = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
-
-    // _returnToken Declares claim token
-    // MSN-Testnet 0x2F8De05106132a363Ca261083D496cf1b5680cc1
-    IERC20 private _returnToken;
-
-    event OwnershipTransferred(address _previousOwner, address _newOwner);
-    event OwnershipRenounced(address _previousOwner, address _newOwner);
-    event AddressesAdded(uint256 _amount);
-
-    address public owner;
-
-    ///@dev Mapping of address -> struct
-    mapping(address => presaleWallet) public inPresale;
-
-    /// @param isWhiteListed - whether address is whitelisted (true or false)
-    /// @param amount - amount of deposit token sent
-    /// @param number - number of transactions from the wallet
-    /// @param tokenAmount - initial amount of tokens to send based on amount of deposit token and presale price
-    /// @param newAmount - number of tokens left to claim (decreases after claims)
-    /// @param tgeCollect - amount of tokens to collect after TGE
-    /// @param nrmCollect - amount of tokens to collect after tgeCollect
-    /// @param numOfCollectTX increases by 1 after each collect (works from 0 to 10 (11 tx))
-    struct presaleWallet {
-        bool isWhiteListed;
-        uint8 txCount;
-        uint256 tokenAmount;
-        uint256 newAmount;
-        uint256 tgeCollect;
-        uint256 nrmCollect;
-        uint8 numOfCollectTX;
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
     }
 
-    modifier onlyOwner {
-        require(msg.sender == owner, "OnlyOwner: You're not the owner");
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * By default, the owner account will be the one that deploys the contract. This
+ * can later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor() {
+        _setOwner(_msgSender());
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
     }
 
-    constructor () {
-        owner = msg.sender;
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions anymore. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby removing any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _setOwner(address(0));
     }
 
-    function setTokenAddress(IERC20 _token) public onlyOwner {
-        _returnToken = _token;
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _setOwner(newOwner);
     }
 
-    function addAddresses(address[] memory _addresses, uint256[] memory _ammounts) public onlyOwner {
-        uint256 countAddr = _addresses.length;
-        uint256 countAmm = _ammounts.length;
-        require(countAddr == countAmm, "Lengths are not matching");
-        for (uint256 i = 0; i < countAddr; i++) {
-            inPresale[_addresses[i]].isWhiteListed = true;
-            uint256 _tokenAmount = _ammounts[i];
-            inPresale[_addresses[i]].tokenAmount = (_tokenAmount*10**2)/seedPrice;
-            inPresale[_addresses[i]].newAmount = (_tokenAmount*10**2)/seedPrice;
-            inPresale[_addresses[i]].tgeCollect = (((_tokenAmount*10**2)/seedPrice)*tgeToCollect)/(1*10**5);
-            inPresale[_addresses[i]].nrmCollect = (((_tokenAmount*10**2)/seedPrice)*normalCollect)/(1*10**5);
+    function _setOwner(address newOwner) private {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+contract Staking is Ownable {
+    using SafeERC20 for IERC20;
+
+
+    uint256 private startBlock;
+    uint256 private endBlock;
+    uint256 private lastDepositBlock;
+    uint256 private totalTokens;
+    uint256 private tokensPerBlock;
+    uint256 private totalDeposited;
+    uint256 private numberOfUsers;
+    uint256 private lastCalculatedBlock;
+    IERC20 private depositToken;
+    IERC20 private rewardToken;
+    uint256 precisionLevel = 1*10**18;
+
+    address[] private allAddresses;
+
+    struct userStruct {
+        bool isInStaking;
+        uint256 depositAmount;
+        uint256 rewardDebt;
+        uint256 claimTx;
+        uint256 currentRewardPerBlock;
+        uint256 depositBlock;
+        uint256 unlockBlock;
+    }
+
+    mapping(address => userStruct) public stakingWallets;
+
+    event DepositSuccessful(address _wallet, uint256 _amount);
+    event WithdrawalSuccessful(address _wallet, uint256 _claimCycle, uint256 _amount);
+    event HarvestSuccessfull(address _wallet, uint256 _amount);
+    event RewardsRecalculated(bool _success);
+    event HarvestReDeposited(address _wallet, uint256 _amount);
+
+    constructor(uint256 _startBlock, uint256 _totalTokens, IERC20 _depositToken, IERC20 _rewardToken) {
+        startBlock = _startBlock;
+        endBlock = startBlock + 20*60*24*365*3; // 1 year is approx. 10512000 blocks
+        totalTokens = _totalTokens;
+        tokensPerBlock = totalTokens*precisionLevel / (20*60*24*365*3); // precision level??
+        depositToken = _depositToken;
+        rewardToken = _rewardToken;
+        lastDepositBlock = endBlock - 20*60*24*80; // 1 months and 50 days
+    }    
+
+    function depToken() internal view returns (IERC20) {
+        return depositToken;
+    }
+
+    function rewToken() internal view returns (IERC20) {
+        return rewardToken;
+    }
+
+    function deposit(uint256 _amount) public {
+        require(block.number >= startBlock, "Error: Deposits to this contract are not yet allowed");
+        require(block.number <= lastDepositBlock, "Error: Deposits have finished");
+
+        depToken().safeTransferFrom(msg.sender, address(this), _amount);
+        _recalculateRewardForAllUsers();
+        totalDeposited += _amount;
+        if (!stakingWallets[msg.sender].isInStaking) {
+            numberOfUsers ++;
+            allAddresses.push(msg.sender);
         }
-        emit AddressesAdded(countAddr);
+        stakingWallets[msg.sender].isInStaking = true;
+        stakingWallets[msg.sender].depositAmount += _amount;
+        stakingWallets[msg.sender].rewardDebt += 0;
+        stakingWallets[msg.sender].claimTx = 0;
+        stakingWallets[msg.sender].depositBlock = block.number;
+        stakingWallets[msg.sender].unlockBlock = block.number + 20*60*24*30; // 30 days
+        emit DepositSuccessful(msg.sender, _amount);
     }
 
-    function transferOwnership(address _newOwner) public onlyOwner {
-        address previousOwner = owner;
-        owner = _newOwner;
-        emit OwnershipTransferred(previousOwner, owner);
-    }
-
-    function renounceOwnership() public onlyOwner {
-        address _previousOwner = owner;
-        owner = address(0);
-        emit OwnershipRenounced(_previousOwner, owner);
-    }
-    
-    /// @return deposit token address
-    function depositToken() public view virtual returns (IERC20) {
-        return _depositToken;
-    }
-    
-    /// @return presale token address
-    function returnToken() public view virtual returns (IERC20) {
-        return _returnToken;
-    }
-
-    /// @return collect times (9 values)
-    function collectTimes() public view virtual returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
-        require(tgeHappened == true, "TGE has not happened!");
-        return(tgeTime, Collect1, Collect2, Collect3, Collect4, Collect5, Collect6, Collect7, Collect8, Collect9, Collect10);
-    }
-
-    
-    // Withdraw deposit token by owner after presale
-    /// @notice need to add to closePresale function
-    function withdrawAnyToken(IERC20 _address) public onlyOwner {
-        require(_address.balanceOf(address(this)) > 0, "No tokens to transfer");
-        _address.safeTransfer(msg.sender, _address.balanceOf(address(this)));
-    }
-
-    
-    /// @notice Sets tgeHappened to true and claimTokens() could be used
-    function setTGEHappened() public onlyOwner {
-        tgeHappened = true;
-        tgeTime = block.timestamp;
-        Collect1 = block.timestamp + 2 weeks;
-        Collect2 = block.timestamp + 4 weeks;
-        Collect3 = block.timestamp + 6 weeks;
-        Collect4 = block.timestamp + 8 weeks;
-        Collect5 = block.timestamp + 10 weeks;
-        Collect6 = block.timestamp + 12 weeks;
-        Collect7 = block.timestamp + 14 weeks;
-        Collect8 = block.timestamp + 16 weeks;
-        Collect9 = block.timestamp + 18 weeks;
-        Collect10 = block.timestamp + 20 weeks;
-    }
-    
-    function checkTime() internal view returns(uint8) {
-        uint256 _currentTime = block.timestamp;
-        if (_currentTime >= Collect1) {
-            if (_currentTime >= Collect2) {
-                if (_currentTime >= Collect3) {
-                    if (_currentTime >= Collect4) {
-                        if (_currentTime >= Collect5) {
-                            if (_currentTime >= Collect6){
-                                if (_currentTime >= Collect7) {
-                                    if (_currentTime >= Collect8) {
-                                        if (_currentTime >= Collect9) {
-                                            if (_currentTime >= Collect10) {
-                                                return 10;
-                                            } else {
-                                                return 9;
-                                            }
-                                        } else {
-                                            return 8;
-                                        }
-                                    } else {
-                                        return 7;
-                                    }
-                                } else {
-                                    return 6;
-                                }
-                            } else {
-                                return 5;
-                            }
-                        } else {
-                            return 4;
-                        }
-                    } else {
-                        return 3;
-                    }
-                } else {
-                    return 2;
+    function withdraw(uint256 _amount) public {
+        _recalculateRewardForAllUsers();
+        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
+        uint256 claimCycle = getClaimCycle(msg.sender);
+        require(claimCycle > 0, "You have not yet reached unlock block");
+        require(stakingWallets[msg.sender].claimTx < claimCycle, "Next claim cycle has not been reached");
+        require(stakingWallets[msg.sender].claimTx <= 50, "You have already claimed everything");
+        uint256 withdrawableAmount = getWithdrawableAmount(msg.sender);
+        require(withdrawableAmount >= _amount, "You cannot withdraw that many tokens");
+        totalDeposited -= _amount;
+        stakingWallets[msg.sender].depositAmount -= _amount;
+        if (stakingWallets[msg.sender].depositAmount == 0) {
+            for (uint256 i = 0; i < allAddresses.length; i++) {
+                if (allAddresses[i] == msg.sender) {
+                    allAddresses[i] = allAddresses[allAddresses.length - 1];
+                    allAddresses.pop();
+                    stakingWallets[msg.sender].isInStaking = false;
                 }
-            } else {
+            }
+        }
+        _recalculateRewardForAllUsers();
+        stakingWallets[msg.sender].claimTx = claimCycle; 
+        uint256 _userRewardDebt = stakingWallets[msg.sender].rewardDebt;
+        stakingWallets[msg.sender].rewardDebt = 0;
+        rewToken().safeTransfer(msg.sender, _amount);
+        rewToken().safeTransfer(msg.sender, _userRewardDebt);
+        emit WithdrawalSuccessful(msg.sender , claimCycle, _amount);
+        emit HarvestSuccessfull(msg.sender, _userRewardDebt);
+    }
+
+    function lastDepBlock() public view returns (uint256) {
+
+    }
+
+    function getWithdrawableAmount(address _address) public view returns(uint256) {
+        uint256 claimCycle = getClaimCycle(_address);
+        uint256 _userWithdrawableAmount = (stakingWallets[_address].depositAmount/50)*(claimCycle-stakingWallets[_address].claimTx);
+        return _userWithdrawableAmount;
+    }
+
+    function getClaimCycle(address _address) internal view returns(uint256) {
+        if (block.number > stakingWallets[_address].unlockBlock) {
+            uint256 claimCycle = (block.number - stakingWallets[_address].unlockBlock) / 57600;
+            if (claimCycle == 0) {
                 return 1;
+            } else {
+                return claimCycle;
             }
         } else {
             return 0;
         }
     }
-    
-    /// @dev function to claim tokens after TGE has happened
-    function claimTokens() public {
-        require(tgeHappened == true, "Claim Error: TGE has not yet happened");
-        require(inPresale[msg.sender].isWhiteListed, "Claim Error: You have not participated in presale");
-        require(inPresale[msg.sender].numOfCollectTX <= 11,"Claim Error: You have claimed all tokens");
-        uint8 _collectNumber = checkTime();
-        if (_collectNumber == 0 && inPresale[msg.sender].numOfCollectTX == 0) {
-            uint256 _amountToCollect = inPresale[msg.sender].tgeCollect;
-            require(inPresale[msg.sender].newAmount >= _amountToCollect, "You have not enought tokens left");
-            inPresale[msg.sender].newAmount -= _amountToCollect;
-            inPresale[msg.sender].numOfCollectTX ++;
-            returnToken().safeTransfer(msg.sender, _amountToCollect);
-        } else if (_collectNumber > 0 && inPresale[msg.sender].numOfCollectTX == 0) {
-            uint256 _amountToCollect = inPresale[msg.sender].nrmCollect*_collectNumber;
-            _amountToCollect += inPresale[msg.sender].tgeCollect;
-            require(inPresale[msg.sender].newAmount >= _amountToCollect, "You have not enought tokens left");
-            inPresale[msg.sender].newAmount -= _amountToCollect;
-            inPresale[msg.sender].numOfCollectTX += _collectNumber + 1;
-            returnToken().safeTransfer(msg.sender, _amountToCollect);
-        } else if (_collectNumber > 0 && inPresale[msg.sender].numOfCollectTX > 0) {
-            uint8 _numberOfCollects = inPresale[msg.sender].numOfCollectTX;
-            uint8 _leftCollects = _collectNumber - _numberOfCollects + 1;
-            uint256 _amountToCollect = inPresale[msg.sender].nrmCollect*_leftCollects;
-            require(inPresale[msg.sender].newAmount >= _amountToCollect, "You have not enought tokens left");
-            inPresale[msg.sender].newAmount -= _amountToCollect;
-            inPresale[msg.sender].numOfCollectTX += _leftCollects;
-            returnToken().safeTransfer(msg.sender, _amountToCollect);
-        } else {
-            revert("Claim Error: Time for the next claim has not been reached");
+
+    function harvestAndRestake() public {
+        _recalculateRewardForAllUsers();
+        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
+        require(stakingWallets[msg.sender].rewardDebt > 0,"Nothing to claim");
+        require(block.number <= lastDepositBlock, "Error: Deposits have finished");
+        uint256 _amount = stakingWallets[msg.sender].rewardDebt;
+        stakingWallets[msg.sender].rewardDebt = 0;
+        totalDeposited += _amount;
+        if (!stakingWallets[msg.sender].isInStaking) {
+            numberOfUsers ++;
+            allAddresses.push(msg.sender);
         }
+        stakingWallets[msg.sender].isInStaking = true;
+        stakingWallets[msg.sender].depositAmount += _amount;
+        stakingWallets[msg.sender].claimTx = 0;
+        stakingWallets[msg.sender].depositBlock = block.number;
+        stakingWallets[msg.sender].unlockBlock = block.number + 20*60*24*30; // 30 days
+        emit HarvestReDeposited(msg.sender, _amount);
     }
 
-    /// @notice Reverts if funds are sent directly to the smart contract
-    receive() external payable {
-        revert("ReceiveError: This Smart Contract cannot receive BNB");
+    function harvest() public {
+        _recalculateRewardForAllUsers();
+        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
+        require(stakingWallets[msg.sender].rewardDebt > 0,"Nothing to claim");
+        uint256 toHarvest = stakingWallets[msg.sender].rewardDebt;
+        stakingWallets[msg.sender].rewardDebt = 0;
+        rewToken().safeTransfer(msg.sender, toHarvest);
+        emit HarvestSuccessfull(msg.sender, toHarvest);
     }
 
-    fallback() external payable {
-        revert("ReceiveError: This Smart Contract cannot receive money like this");
+    function recalculateReward() public {
+        _recalculateRewardForAllUsers();
+        emit RewardsRecalculated(true);
     }
+
+    function getAPR(uint256 _depAmount) public view returns (uint256) {
+        uint256 _apr = ((tokensPerBlock*10**3)*_depAmount*10512000)/(totalDeposited+(_depAmount*10**18));
+        return _apr;
+    }
+
+    function getTotalDeposited() public view returns (uint256) {
+        return totalDeposited;
+    }
+
+    function getUserDeposit(address _user) public view returns (uint256) {
+        return stakingWallets[_user].depositAmount;
+    }
+
+    function getUserRewardDebt(address _user) public view returns (uint256) {
+        return stakingWallets[_user].rewardDebt;
+    }
+
+    function getEndBlock() public view returns (uint256) {
+        return endBlock;
+    }
+
+    function getLastDepositBlock() public view returns (uint256) {
+        return lastDepositBlock;
+    }
+
+    function _recalculateRewardForAllUsers() internal {
+        uint256 blocksPassed = block.number - lastCalculatedBlock;
+        for (uint256 i = 0; i<numberOfUsers; i++) {
+            uint256 _oldRewardPerBlock = _calculateUserRewardPerBlock(allAddresses[i]);
+            stakingWallets[allAddresses[i]].currentRewardPerBlock = _oldRewardPerBlock;
+            stakingWallets[allAddresses[i]].rewardDebt += _oldRewardPerBlock*blocksPassed/precisionLevel;
+        }
+        lastCalculatedBlock = block.number;
+    }
+
+    function _calculateUserRewardPerBlock(address _address) view internal returns(uint256) {
+        uint256 _percentRewardForUser = stakingWallets[_address].depositAmount*precisionLevel/totalDeposited;
+        uint256 _rewardForUser = _percentRewardForUser*tokensPerBlock/precisionLevel; //tokensPerBlock has precision multiplier
+        return _rewardForUser;  // Reward is returned with 10**18 at the end (which is more than tokens to claim)
+    }
+    
+    function emergencyWithdrawal() public onlyOwner {
+        depToken().safeTransfer(owner(), depToken().balanceOf(address(this)));
+        rewToken().safeTransfer(owner(), rewToken().balanceOf(address(this)));
+    }
+
 }

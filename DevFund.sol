@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.7;
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -387,7 +387,7 @@ contract DevSalary {
         uint256 monthlyAllowance;
         uint256 txCount;
         uint256 totalClaimed;
-        uint256 joinedAtMonth;
+        uint256 joinedAtTime;
     }
 
     mapping(address => developers) public msnDevelopers;
@@ -420,7 +420,6 @@ contract DevSalary {
     constructor(IERC20 _token) {
         owner = msg.sender;
         isManager[msg.sender] = true;
-        tgeTime = block.timestamp;
         msnToken = _token;
     }
 
@@ -437,13 +436,11 @@ contract DevSalary {
     }
 
     function addDevelopers(address[] memory _newDev, uint256[] memory _monthlyAllowance) public onlyManager {
-        uint256 countDev = _newDev.length;
-        uint256 countAll = _monthlyAllowance.length;
-        require(countDev == countAll, "Lengths are not matching");
-        for (uint256 i = 0; i < countDev; i++) {
+        require(_newDev.length == _monthlyAllowance.length, "Lengths are not matching");
+        for (uint256 i = 0; i < _newDev.length; i++) {
             msnDevelopers[_newDev[i]].isDeveloper = true;
-            msnDevelopers[_newDev[i]].monthlyAllowance = _monthlyAllowance[i]*10**18;
-            msnDevelopers[_newDev[i]].joinedAtMonth = _returnMonthsSinceTGE();
+            msnDevelopers[_newDev[i]].monthlyAllowance = _monthlyAllowance[i]*(10**18);
+            msnDevelopers[_newDev[i]].joinedAtTime = block.timestamp;
         }
         emit DevelopersAdded(_newDev);
     }
@@ -463,14 +460,25 @@ contract DevSalary {
 
     function _returnMonthsSinceTGE() internal view returns (uint256) {
         uint256 unixTimeSince = block.timestamp - tgeTime;
-        uint256 monthSince = unixTimeSince/60/60/24/30;
+        uint256 monthSince = unixTimeSince/(60*60*24*30);
         return monthSince;
     }
 
+    function _monthSinceJoin() internal view returns (uint256) {
+        uint256 unixTimeSince = block.timestamp - msnDevelopers[msg.sender].joinedAtTime;
+        uint256 monthsSince = unixTimeSince / (60*60*24*30);
+        return monthsSince;
+    }
+
+    function setTGE() public onlyOwner {
+        tgeTime = block.timestamp;
+    }
+
     function claim() public {
+        require(tgeTime < block.timestamp, "Unable to claim yet");
         require(msnDevelopers[msg.sender].isDeveloper, "OnlyDeveloper: You're not allowed");
-        uint256 monthSinceTGE = _returnMonthsSinceTGE();
-        uint256 canClaim = 1 + monthSinceTGE - msnDevelopers[msg.sender].txCount - msnDevelopers[msg.sender].joinedAtMonth;
+        uint256 monthSinceJoin = _monthSinceJoin();
+        uint256 canClaim = 1 + monthSinceJoin - msnDevelopers[msg.sender].txCount;
         require(canClaim > 0, "Claim time was not reached yet");
         msnDevelopers[msg.sender].txCount += canClaim;
         uint256 toClaim = msnDevelopers[msg.sender].monthlyAllowance*canClaim;
@@ -483,12 +491,6 @@ contract DevSalary {
         address _previousOwner = owner;
         owner = _newOwner;
         emit OwnershipTransferred(_previousOwner, _newOwner);
-    }
-
-    function renounceOwnership() public onlyOwner {
-        address _previousOwner = owner;
-        owner = address(0);
-        emit OwnershipRenounced(_previousOwner, owner);
     }
 
     function withdrawAnyToken(IERC20 _address) public onlyOwner {

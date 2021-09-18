@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.7;
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -412,7 +412,6 @@ contract MarketingFund {
     constructor(IERC20 _token) {
         owner = msg.sender;
         msnToken = _token;
-        tgeTime = block.timestamp;
     }
 
     function addMember(address _newMember) public onlyOwner {
@@ -432,23 +431,22 @@ contract MarketingFund {
         emit OwnershipTransferred(_previousOwner, _newOwner);
     }
 
-    function renounceOwnership() public onlyOwner {
-        address _previousOwner = owner;
-        owner = address(0);
-        emit OwnershipRenounced(_previousOwner, owner);
-    }
-
     function _maisonToken() internal view returns(IERC20) {
         return msnToken;
     }
 
+    function setTGETime() public onlyOwner {
+        tgeTime = block.timestamp;
+    }
+
     function _returnMonthsSinceTGE() internal view returns (uint256) {
         uint256 unixTimeSince = block.timestamp - tgeTime;
-        uint256 monthSince = unixTimeSince/60/60/24/30;
+        uint256 monthSince = unixTimeSince/(60*60*24*30);
         return monthSince;
     }
 
     function claim() public fundMember{
+        require(tgeTime != 0, "Token was not yet launched");
         uint256 monthSinceTGE = _returnMonthsSinceTGE();
         uint256 canClaim = 1 + monthSinceTGE - txCount;
         require(canClaim > 0, "Next claim time was not reached");
@@ -457,7 +455,6 @@ contract MarketingFund {
     }
 
     function withdrawAnyToken(IERC20 _address) public onlyOwner {
-        require(_address != msnToken, "Error: Withdrawing MSN Token");
         require(_address.balanceOf(address(this)) > 0, "No tokens to transfer");
         _address.safeTransfer(msg.sender, _address.balanceOf(address(this)));
     }

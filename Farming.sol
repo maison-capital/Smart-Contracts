@@ -1,7 +1,3 @@
-/**
- *Submitted for verification at BscScan.com on 2021-09-18
-*/
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
@@ -487,7 +483,7 @@ contract Farming is Ownable {
     address[] private allAddresses;
 
     struct userStruct {
-        bool isInStaking;
+        bool isInFarming;
         uint256 depositAmount;
         uint256 rewardDebt;
         uint256 claimTx;
@@ -529,11 +525,11 @@ contract Farming is Ownable {
         depToken().safeTransferFrom(msg.sender, address(this), _amount);
         _recalculateRewardForAllUsers();
         totalDeposited += _amount;
-        if (!stakingWallets[msg.sender].isInStaking) {
+        if (!stakingWallets[msg.sender].isInFarming) {
             numberOfUsers ++;
             allAddresses.push(msg.sender);
         }
-        stakingWallets[msg.sender].isInStaking = true;
+        stakingWallets[msg.sender].isInFarming = true;
         stakingWallets[msg.sender].depositAmount += _amount;
         stakingWallets[msg.sender].rewardDebt += 0;
         stakingWallets[msg.sender].claimTx = 0;
@@ -544,7 +540,7 @@ contract Farming is Ownable {
 
     function withdraw(uint256 _amount) public {
         _recalculateRewardForAllUsers();
-        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
+        require(stakingWallets[msg.sender].isInFarming, "You have not staked anything");
         uint256 claimCycle = getClaimCycle(msg.sender);
         require(claimCycle > 0, "You have not yet reached unlock block");
         require(stakingWallets[msg.sender].claimTx < claimCycle, "Next claim cycle has not been reached");
@@ -558,7 +554,7 @@ contract Farming is Ownable {
                 if (allAddresses[i] == msg.sender) {
                     allAddresses[i] = allAddresses[allAddresses.length - 1];
                     allAddresses.pop();
-                    stakingWallets[msg.sender].isInStaking = false;
+                    stakingWallets[msg.sender].isInFarming = false;
                 }
             }
         }
@@ -573,7 +569,7 @@ contract Farming is Ownable {
     }
 
     function lastDepBlock() public view returns (uint256) {
-
+        return lastDepositBlock;
     }
 
     function getWithdrawableAmount(address _address) public view returns(uint256) {
@@ -595,29 +591,9 @@ contract Farming is Ownable {
         }
     }
 
-    function harvestAndRestake() public {
-        _recalculateRewardForAllUsers();
-        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
-        require(stakingWallets[msg.sender].rewardDebt > 0,"Nothing to claim");
-        require(block.number <= lastDepositBlock, "Error: Deposits have finished");
-        uint256 _amount = stakingWallets[msg.sender].rewardDebt;
-        stakingWallets[msg.sender].rewardDebt = 0;
-        totalDeposited += _amount;
-        if (!stakingWallets[msg.sender].isInStaking) {
-            numberOfUsers ++;
-            allAddresses.push(msg.sender);
-        }
-        stakingWallets[msg.sender].isInStaking = true;
-        stakingWallets[msg.sender].depositAmount += _amount;
-        stakingWallets[msg.sender].claimTx = 0;
-        stakingWallets[msg.sender].depositBlock = block.number;
-        stakingWallets[msg.sender].unlockBlock = block.number + 20*60*24*30; // 30 days
-        emit HarvestReDeposited(msg.sender, _amount);
-    }
-
     function harvest() public {
         _recalculateRewardForAllUsers();
-        require(stakingWallets[msg.sender].isInStaking, "You have not staked anything");
+        require(stakingWallets[msg.sender].isInFarming, "You have not staked anything");
         require(stakingWallets[msg.sender].rewardDebt > 0,"Nothing to claim");
         uint256 toHarvest = stakingWallets[msg.sender].rewardDebt;
         stakingWallets[msg.sender].rewardDebt = 0;
@@ -628,11 +604,6 @@ contract Farming is Ownable {
     function recalculateReward() public {
         _recalculateRewardForAllUsers();
         emit RewardsRecalculated(true);
-    }
-
-    function getAPR(uint256 _depAmount) public view returns (uint256) {
-        uint256 _apr = ((tokensPerBlock*10**3)*_depAmount*10512000)/(totalDeposited+(_depAmount*10**18));
-        return _apr;
     }
 
     function getTotalDeposited() public view returns (uint256) {

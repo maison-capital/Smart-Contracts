@@ -580,7 +580,7 @@ contract Staking is Ownable {
 
     function getClaimCycle(address _address) internal view returns(uint256) {
         if (block.number > stakingWallets[_address].unlockBlock) {
-            uint256 claimCycle = (block.number - stakingWallets[_address].unlockBlock) / 57600;
+            uint256 claimCycle = (block.number - stakingWallets[_address].unlockBlock) / 28800;
             if (claimCycle == 0) {
                 return 1;
             } else {
@@ -588,6 +588,15 @@ contract Staking is Ownable {
             }
         } else {
             return 0;
+        }
+    }
+
+    function getHowMuchICanWithdraw(address _address) public view returns (uint256) {
+        uint256 claimCycle = getClaimCycle(_address);
+        if (claimCycle == 0) {
+            return 0;
+        } else {
+            return getWithdrawableAmount(_address);
         }
     }
 
